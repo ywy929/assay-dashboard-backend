@@ -52,9 +52,6 @@ class Token(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
-class TokenData(BaseModel):
-    phone: str | None = None
-    role: str | None = None
 
 # ----------------------------------------------------------------------
 # ASSAY RESULT SCHEMAS
@@ -87,28 +84,6 @@ class AssayResultResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class AssayResultCreate(BaseModel):
-    customer: int
-    itemcode: str
-    formcode: int
-    collector: str
-    incharge: str
-    color: int
-    sampleweight: float
-    samplereturn: float
-    fwa: int
-    fwb: int
-    lwa: int
-    lwb: int
-    silverpct: int
-    resulta: float
-    resultb: float
-    preresult: float
-    loss: float
-    finalresult: float
-    returndate: Optional[datetime] = None
 
 
 # ----------------------------------------------------------------------

@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc
+from sqlalchemy import and_, desc
 from typing import List
 from datetime import datetime
 import models
 from routers.dependency import get_db, get_current_user
 from pydantic import BaseModel
 import requests
-import json
 
 router = APIRouter(
     tags=["notifications"]

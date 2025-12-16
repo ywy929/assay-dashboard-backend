@@ -5,6 +5,7 @@ from database import get_db
 from routers.dependency import get_current_user
 import models
 from datetime import datetime, timedelta
+from utils import calculate_period_range
 
 router = APIRouter()
 
@@ -60,52 +61,7 @@ def get_dashboard_metrics(
     - Admin/Boss/Worker: See all results
     - Customers: Only see their own results
     """
-    # Calculate date range based on period and offset
-    now = datetime.now()
-
-    if period == "week":
-        # Week starts on Monday (0) and ends on Sunday (6)
-        weekday = now.weekday()
-        start_of_current_week = now - timedelta(days=weekday)
-        start_of_current_week = start_of_current_week.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        date_from_obj = start_of_current_week + timedelta(weeks=offset)
-        date_to_obj = date_from_obj + timedelta(days=7)
-
-    elif period == "month":
-        # Get first day of the current month, then apply offset
-        if offset == 0:
-            date_from_obj = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        else:
-            # Calculate the target month
-            target_month = now.month + offset
-            target_year = now.year
-
-            while target_month < 1:
-                target_month += 12
-                target_year -= 1
-            while target_month > 12:
-                target_month -= 12
-                target_year += 1
-
-            date_from_obj = datetime(target_year, target_month, 1)
-
-        # Get first day of next month
-        if date_from_obj.month == 12:
-            date_to_obj = datetime(date_from_obj.year + 1, 1, 1)
-        else:
-            date_to_obj = datetime(date_from_obj.year, date_from_obj.month + 1, 1)
-
-    elif period == "year":
-        target_year = now.year + offset
-        date_from_obj = datetime(target_year, 1, 1)
-        date_to_obj = datetime(target_year + 1, 1, 1)
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid period. Use 'week', 'month', or 'year'"
-        )
+    date_from_obj, date_to_obj = calculate_period_range(period, offset)
 
     query = db.query(models.AssayResult).filter(
         models.AssayResult.finalresult != 0,
@@ -158,48 +114,7 @@ def get_efficiency_metrics(
     - Admin/Boss/Worker: See all results
     - Customers: Only see their own results
     """
-    # Calculate date range based on period and offset
-    now = datetime.now()
-
-    if period == "week":
-        weekday = now.weekday()
-        start_of_current_week = now - timedelta(days=weekday)
-        start_of_current_week = start_of_current_week.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        date_from_obj = start_of_current_week + timedelta(weeks=offset)
-        date_to_obj = date_from_obj + timedelta(days=7)
-
-    elif period == "month":
-        if offset == 0:
-            date_from_obj = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        else:
-            target_month = now.month + offset
-            target_year = now.year
-
-            while target_month < 1:
-                target_month += 12
-                target_year -= 1
-            while target_month > 12:
-                target_month -= 12
-                target_year += 1
-
-            date_from_obj = datetime(target_year, target_month, 1)
-
-        if date_from_obj.month == 12:
-            date_to_obj = datetime(date_from_obj.year + 1, 1, 1)
-        else:
-            date_to_obj = datetime(date_from_obj.year, date_from_obj.month + 1, 1)
-
-    elif period == "year":
-        target_year = now.year + offset
-        date_from_obj = datetime(target_year, 1, 1)
-        date_to_obj = datetime(target_year + 1, 1, 1)
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid period. Use 'week', 'month', or 'year'"
-        )
+    date_from_obj, date_to_obj = calculate_period_range(period, offset)
 
     query = db.query(models.AssayResult).filter(
         models.AssayResult.finalresult != 0,
@@ -268,16 +183,9 @@ def get_trend_data(
     - For month: Returns daily data (~30 days)
     - For year: Returns monthly data (12 months)
     """
-    now = datetime.now()
+    date_from_obj, date_to_obj = calculate_period_range(period, offset)
 
     if period == "week":
-        weekday = now.weekday()
-        start_of_current_week = now - timedelta(days=weekday)
-        start_of_current_week = start_of_current_week.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        date_from_obj = start_of_current_week + timedelta(weeks=offset)
-        date_to_obj = date_from_obj + timedelta(days=7)
-
         # Generate daily data for the week
         trend_data = []
         for i in range(7):
@@ -303,26 +211,6 @@ def get_trend_data(
             })
 
     elif period == "month":
-        if offset == 0:
-            date_from_obj = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        else:
-            target_month = now.month + offset
-            target_year = now.year
-
-            while target_month < 1:
-                target_month += 12
-                target_year -= 1
-            while target_month > 12:
-                target_month -= 12
-                target_year += 1
-
-            date_from_obj = datetime(target_year, target_month, 1)
-
-        if date_from_obj.month == 12:
-            date_to_obj = datetime(date_from_obj.year + 1, 1, 1)
-        else:
-            date_to_obj = datetime(date_from_obj.year, date_from_obj.month + 1, 1)
-
         # Generate daily data for the month
         days_in_month = (date_to_obj - date_from_obj).days
         trend_data = []
@@ -350,11 +238,8 @@ def get_trend_data(
             })
 
     elif period == "year":
-        target_year = now.year + offset
-        date_from_obj = datetime(target_year, 1, 1)
-        date_to_obj = datetime(target_year + 1, 1, 1)
-
         # Generate monthly data for the year
+        target_year = date_from_obj.year
         trend_data = []
         for month in range(1, 13):
             month_start = datetime(target_year, month, 1)

@@ -4,8 +4,9 @@ from database import get_db
 from routers.dependency import get_current_user, get_admin_user
 import models, schemas
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from routers.notifications import send_push_notification
+from utils import build_assay_response
 
 router = APIRouter()
 
@@ -47,35 +48,8 @@ def get_my_assay_results(
         .all()
     )
 
-    # Add customer name to each result
-    items = []
-    for result in results:
-        result_dict = {
-            "id": result.id,
-            "customer": result.customer,
-            "customer_name": result.customer_user.name if result.customer_user else None,
-            "itemcode": result.itemcode,
-            "formcode": result.formcode,
-            "collector": result.collector,
-            "incharge": result.incharge,
-            "color": result.color,
-            "sampleweight": result.sampleweight,
-            "samplereturn": result.samplereturn,
-            "fwa": result.fwa,
-            "fwb": result.fwb,
-            "lwa": result.lwa,
-            "lwb": result.lwb,
-            "silverpct": result.silverpct,
-            "resulta": result.resulta,
-            "resultb": result.resultb,
-            "preresult": result.preresult,
-            "loss": result.loss,
-            "finalresult": result.finalresult,
-            "created": result.created,
-            "modified": result.modified,
-            "returndate": result.returndate,
-        }
-        items.append(result_dict)
+    # Build response items
+    items = [build_assay_response(result) for result in results]
 
     # Return paginated response
     return {
@@ -117,34 +91,7 @@ def get_my_assay_result_by_id(
             detail="Assay result not found or you don't have permission to view it"
         )
 
-    # Add customer name to result
-    result_dict = {
-        "id": result.id,
-        "customer": result.customer,
-        "customer_name": result.customer_user.name if result.customer_user else None,
-        "itemcode": result.itemcode,
-        "formcode": result.formcode,
-        "collector": result.collector,
-        "incharge": result.incharge,
-        "color": result.color,
-        "sampleweight": result.sampleweight,
-        "samplereturn": result.samplereturn,
-        "fwa": result.fwa,
-        "fwb": result.fwb,
-        "lwa": result.lwa,
-        "lwb": result.lwb,
-        "silverpct": result.silverpct,
-        "resulta": result.resulta,
-        "resultb": result.resultb,
-        "preresult": result.preresult,
-        "loss": result.loss,
-        "finalresult": result.finalresult,
-        "created": result.created,
-        "modified": result.modified,
-        "returndate": result.returndate,
-    }
-
-    return result_dict
+    return build_assay_response(result)
 
 
 @router.get("/search")
@@ -199,7 +146,6 @@ def search_assay_results(
         try:
             date_to_obj = datetime.strptime(date_to.strip(), "%Y-%m-%d")
             # Add one day to include the entire date_to day
-            from datetime import timedelta
             date_to_obj = date_to_obj + timedelta(days=1)
             query = query.filter(models.AssayResult.created < date_to_obj)
         except ValueError:
@@ -219,35 +165,8 @@ def search_assay_results(
         .all()
     )
 
-    # Build response with customer names
-    items = []
-    for result in results:
-        result_dict = {
-            "id": result.id,
-            "customer": result.customer,
-            "customer_name": result.customer_user.name if result.customer_user else None,
-            "itemcode": result.itemcode,
-            "formcode": result.formcode,
-            "collector": result.collector,
-            "incharge": result.incharge,
-            "color": result.color,
-            "sampleweight": result.sampleweight,
-            "samplereturn": result.samplereturn,
-            "fwa": result.fwa,
-            "fwb": result.fwb,
-            "lwa": result.lwa,
-            "lwb": result.lwb,
-            "silverpct": result.silverpct,
-            "resulta": result.resulta,
-            "resultb": result.resultb,
-            "preresult": result.preresult,
-            "loss": result.loss,
-            "finalresult": result.finalresult,
-            "created": result.created,
-            "modified": result.modified,
-            "returndate": result.returndate,
-        }
-        items.append(result_dict)
+    # Build response items
+    items = [build_assay_response(result) for result in results]
 
     return {
         "items": items,

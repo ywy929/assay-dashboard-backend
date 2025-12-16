@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from database import get_db
-import models, schemas, os, hashlib
-from jose import JWTError, jwt, ExpiredSignatureError
+import models, schemas
+from jose import JWTError, jwt
 from config import settings
+from utils import create_hash_with_new_salt, verify_password
 
 router = APIRouter()
 security = HTTPBearer()
@@ -14,39 +15,7 @@ SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
-SALT_SIZE = settings.SALT_SIZE
-HASH_SIZE = settings.HASH_SIZE
-ITERATIONS = settings.ITERATIONS
 
-
-# Password hashing helper functions (matching C# EncryptionHelper)
-def create_hash_with_new_salt(password: str) -> tuple[bytes, bytes]:
-    """
-    Create a new salt and hash the password.
-    Returns (salt, hash) as bytes.
-    Equivalent to C# CreateHashWithNewSalt.
-    """
-    salt = os.urandom(SALT_SIZE)
-    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, ITERATIONS, dklen=HASH_SIZE)
-    return salt, hash_bytes
-
-
-def create_hash_with_existing_salt(password: str, salt: bytes) -> bytes:
-    """
-    Hash the password with an existing salt.
-    Returns hash as bytes.
-    Equivalent to C# CreateHashWithExistingSalt and GetHash.
-    """
-    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, ITERATIONS, dklen=HASH_SIZE)
-    return hash_bytes
-
-
-def verify_password(password: str, salt: bytes, stored_hash: bytes) -> bool:
-    """
-    Verify a password against a stored salt and hash.
-    """
-    computed_hash = create_hash_with_existing_salt(password, salt)
-    return computed_hash == stored_hash
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -81,8 +50,8 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         billing=user.billing,
         coupon=user.coupon,
         role=user.role,
-        created=datetime.now(timezone.utc),
-        modified=datetime.now(timezone.utc),
+        created=datetime.now(),
+        modified=datetime.now(),
     )
 
     try:
@@ -130,7 +99,7 @@ def change_password(payload: schemas.ChangePassword, db: Session = Depends(get_d
     new_salt, new_hash = create_hash_with_new_salt(payload.new_password)
     user.salt = new_salt
     user.pwhash = new_hash
-    user.modified = datetime.now(timezone.utc)
+    user.modified = datetime.now()
 
     try:
         db.add(user)
@@ -160,12 +129,12 @@ def create_tokens(user: models.User, db: Session):
     )
 
     # Save refresh token to database
-    refresh_token_expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token_expires = datetime.now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     db_refresh_token = models.RefreshToken(
         user_id=user.id,
         token=refresh_token,
         expires_at=refresh_token_expires,
-        created=datetime.now(timezone.utc),
+        created=datetime.now(),
         revoked=False
     )
     
@@ -184,7 +153,7 @@ def create_tokens(user: models.User, db: Session):
 
 def create_token(data: dict, expires_delta: timedelta) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + expires_delta
+    expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -284,7 +253,7 @@ def refresh_token(current_token: str, db: Session = Depends(get_db)):
         db_token = db.query(models.RefreshToken).filter(
             models.RefreshToken.token == current_token,
             models.RefreshToken.revoked == False,
-            models.RefreshToken.expires_at > datetime.now(timezone.utc)
+            models.RefreshToken.expires_at > datetime.now()
         ).first()
 
         if not db_token:

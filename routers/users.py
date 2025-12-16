@@ -2,12 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from database import get_db
-from config import settings
 import models, schemas
 from typing import List
 from routers.dependency import get_admin_user, get_current_user, get_staff_user
-import hashlib
-import os
+from utils import create_hash_with_new_salt
 
 router = APIRouter()
 
@@ -232,16 +230,8 @@ def change_user_password(
             detail="You don't have permission to change this user's password"
         )
 
-    # Validate password length
-    if len(request.new_password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 6 characters long"
-        )
-
-    # Generate new salt and hash using settings
-    salt = os.urandom(settings.SALT_SIZE)
-    pwhash = hashlib.pbkdf2_hmac('sha256', request.new_password.encode('utf-8'), salt, settings.ITERATIONS, dklen=settings.HASH_SIZE)
+    # Generate new salt and hash
+    salt, pwhash = create_hash_with_new_salt(request.new_password)
 
     # Update user password
     target_user.salt = salt
