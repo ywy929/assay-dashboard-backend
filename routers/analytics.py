@@ -28,7 +28,8 @@ def get_available_date_range(
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     result = query.first()
@@ -73,7 +74,8 @@ def get_dashboard_metrics(
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     # Get metrics
@@ -126,7 +128,8 @@ def get_efficiency_metrics(
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     results = query.all()
@@ -277,17 +280,24 @@ def get_trend_data(
 @router.get("/customers/top")
 def get_top_customers(
     limit: int = 10,
+    period: str = "month",  # week, month, year
+    offset: int = 0,  # 0 = current, -1 = previous, 1 = next
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get top customers by number of assays.
+    Get top customers by number of assays for the specified period.
     Admin/Boss/Worker only - customers will see empty list.
+    - period: "week", "month", or "year"
+    - offset: 0 for current period, -1 for previous, 1 for next, etc.
     """
     if current_user.role == 'customer':
         return []
 
-    # Query to get top customers with their statistics
+    # Calculate date range for the specified period
+    date_from_obj, date_to_obj = calculate_period_range(period, offset)
+
+    # Query to get top customers with their statistics for the specified period
     top_customers = (
         db.query(
             models.User.name.label('customer_name'),
@@ -299,7 +309,9 @@ def get_top_customers(
         .filter(
             models.AssayResult.finalresult != 0,
             models.AssayResult.finalresult != -2,
-            models.AssayResult.finalresult > 0
+            models.AssayResult.finalresult > 0,
+            models.AssayResult.created >= date_from_obj,
+            models.AssayResult.created < date_to_obj
         )
         .group_by(models.User.id, models.User.name)
         .order_by(func.count(models.AssayResult.id).desc())
@@ -345,7 +357,8 @@ def get_daily_trends(
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     trends = query.group_by(func.date(models.AssayResult.created)).order_by(func.date(models.AssayResult.created)).all()
@@ -390,7 +403,8 @@ def get_monthly_trends(
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     trends = (

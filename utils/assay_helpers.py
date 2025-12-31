@@ -31,6 +31,7 @@ def build_assay_response(result: models.AssayResult) -> Dict[str, Any]:
         "preresult": result.preresult,
         "loss": result.loss,
         "finalresult": result.finalresult,
+        "ready": result.ready,
         "created": result.created,
         "modified": result.modified,
         "returndate": result.returndate,

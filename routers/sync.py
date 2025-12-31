@@ -3,7 +3,7 @@ Sync Router - Endpoints for local-cloud database synchronization
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from typing import List, Optional
 from datetime import datetime
 from database import get_db
@@ -43,6 +43,11 @@ class UserSync(BaseModel):
     coupon: Optional[bool] = None
     created: Optional[datetime] = None
     modified: Optional[datetime] = None
+
+    @field_serializer('pwhash', 'salt')
+    def serialize_bytes(self, value: Optional[bytes]) -> Optional[str]:
+        """Convert bytes to hex string for JSON serialization"""
+        return value.hex() if value else None
 
     class Config:
         from_attributes = True
@@ -181,8 +186,7 @@ def get_changes(
     request: Request,
     since: datetime,
     db: Session = Depends(get_db),
-    _: bool = Depends(verify_sync_key),
-    __: bool = Depends(verify_sync_ip)
+    _: bool = Depends(verify_sync_key)
 ):
     """
     Get all records modified since the given timestamp.
@@ -207,8 +211,7 @@ def push_data(
     request: Request,
     data: PushDataRequest,
     db: Session = Depends(get_db),
-    _: bool = Depends(verify_sync_key),
-    __: bool = Depends(verify_sync_ip)
+    _: bool = Depends(verify_sync_key)
 ):
     """
     Receive data from local and upsert to cloud database.

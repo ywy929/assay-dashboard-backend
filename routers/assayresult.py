@@ -30,11 +30,13 @@ def get_my_assay_results(
     # Customers should not see:
     # - Results with finalresult = 0 (no result yet)
     # - Results with finalresult = -2 (Redo status)
+    # - Results with ready = false (manual hide)
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     # Get total count before pagination
@@ -75,12 +77,13 @@ def get_my_assay_result_by_id(
     query = db.query(models.AssayResult).filter(models.AssayResult.id == result_id)
 
     # If user is a regular customer, filter by their ID and only show results with finalresult
-    # Customers should not see results with finalresult = 0 or -2 (Redo)
+    # Customers should not see results with finalresult = 0 or -2 (Redo) or ready = false
     if current_user.role == 'customer':
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     result = query.first()
@@ -118,7 +121,8 @@ def search_assay_results(
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
-            models.AssayResult.finalresult != -2
+            models.AssayResult.finalresult != -2,
+            models.AssayResult.ready == True
         )
 
     # Apply search filters - only if values are provided and not empty

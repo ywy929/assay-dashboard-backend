@@ -39,6 +39,12 @@ def generate_pdf_for_single_assay(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to access this result"
             )
+        # Customers can only access ready results
+        if not assay_result.ready:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assay result not found"
+            )
 
     # Get customer information
     customer = db.query(models.User).filter(
@@ -116,6 +122,12 @@ def generate_pdf_for_formcode(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to access these results"
+            )
+        # Customers can only access ready results
+        if any(not result.ready for result in assay_results):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No assay results found for this formcode"
             )
 
     # Get customer information from the first result
