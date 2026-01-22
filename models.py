@@ -132,7 +132,7 @@ class RefreshToken(Base):
 
     id: Mapped[int] = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id: Mapped[int] = Column(Integer, ForeignKey("user.id"), index=True)
-    token: Mapped[str] = Column(Text, unique=True, index=True)
+    token: Mapped[str] = Column(String(500), unique=True, index=True)
     expires_at: Mapped[DateTime] = Column(DateTime, index=True)
     created: Mapped[DateTime] = Column(DateTime)
     revoked: Mapped[bool] = Column(Boolean, default=False)
@@ -168,7 +168,7 @@ class PushToken(Base):
 
     id: Mapped[int] = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id: Mapped[int] = Column(Integer, ForeignKey("user.id"), index=True)
-    token: Mapped[str] = Column(Text, unique=True, index=True)
+    token: Mapped[str] = Column(String(500), unique=True, index=True)
     device_type: Mapped[str] = Column(String(20))  # ios, android, web
     created: Mapped[DateTime] = Column(DateTime)
     updated: Mapped[DateTime] = Column(DateTime)

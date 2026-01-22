@@ -35,11 +35,11 @@ class AssayReportGenerator:
         """
         Initialize the generator with company details.
         """
-        self.company_name = "GLOBAL ASSAY SERVICES PTY LTD"
-        self.company_address_one = "123 Assay Street, Metallurgy City"
-        self.company_address_two = "State/Province, 54321, Country"
-        self.company_phone_one = "+1 (555) 123-4567"
-        self.company_phone_two = "+1 (555) 987-6543"
+        self.company_name = "BRIGHTNESS ASSAY SDN BHD"
+        self.company_address_one = "57A, JALAN RAJA UDA, PUSAT PERNIAGAAN RAJA UDA"
+        self.company_address_two = "12300 BUTTERWORTH, PULAU PINANG"
+        self.company_phone_one = "0164423689"
+        self.company_phone_two = "0164385255"
         self.styles = self.create_styles()
 
     def create_styles(self) -> Dict[str, ParagraphStyle]:

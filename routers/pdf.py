@@ -7,8 +7,22 @@ from routers.dependency import get_current_user
 from services.pdf_generator import pdf_generator
 from datetime import datetime
 import os
+import re
 
 router = APIRouter()
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Remove or replace characters that are problematic in filenames.
+    Replaces invalid characters with underscores.
+    """
+    # Replace invalid filename characters with underscores
+    # Invalid chars: / \ : * ? " < > |
+    sanitized = re.sub(r'[/\\:*?"<>|]', '_', filename)
+    # Remove leading/trailing spaces and dots
+    sanitized = sanitized.strip('. ')
+    return sanitized
 
 
 @router.get("/generate/single/{assay_id}")
@@ -68,7 +82,7 @@ def generate_pdf_for_single_assay(
     elif assay_result.finalresult == -3:
         finalresult_display = "LOW"
     else:
-        finalresult_display = f"{assay_result.finalresult:.3f}" if assay_result.finalresult else ""
+        finalresult_display = f"{assay_result.finalresult:.1f}" if assay_result.finalresult else ""
 
     formcode_items = [{
         'itemcode': assay_result.itemcode or '',
@@ -85,11 +99,12 @@ def generate_pdf_for_single_assay(
     )
 
     # Return PDF as streaming response
+    sanitized_itemcode = sanitize_filename(assay_result.itemcode or 'assay')
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename=assay_result_{assay_result.itemcode}.pdf"
+            "Content-Disposition": f"attachment; filename=assay_result_{sanitized_itemcode}.pdf"
         }
     )
 
@@ -156,7 +171,7 @@ def generate_pdf_for_formcode(
         elif result.finalresult == -3:
             finalresult_display = "LOW"
         else:
-            finalresult_display = f"{result.finalresult:.3f}" if result.finalresult else ""
+            finalresult_display = f"{result.finalresult:.1f}" if result.finalresult else ""
 
         formcode_items.append({
             'itemcode': result.itemcode or '',
