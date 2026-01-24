@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from database import get_db
 from routers.dependency import get_current_user, get_admin_user
 import models, schemas
@@ -9,6 +10,11 @@ from routers.notifications import send_push_notification
 from utils import build_assay_response
 
 router = APIRouter()
+
+
+def not_deleted_filter():
+    """Filter to exclude deleted records (handles NULL values as not deleted)"""
+    return or_(models.AssayResult.deleted == False, models.AssayResult.deleted == None)
 
 
 @router.get("/my-results")
@@ -23,21 +29,26 @@ def get_my_assay_results(
     - Regular users (customers): Only see their own results with finalresult > 0
     - Admin/Boss/Worker: See all results
     """
-    query = db.query(models.AssayResult)
+    query = db.query(models.AssayResult).filter(not_deleted_filter())
 
-    # If user is a regular customer, filter by their ID and only show results with finalresult
+    # If user is a regular customer or test customer, filter by their ID and only show results with finalresult
     # Admin, boss, and worker can see all results
+    # testworker can only see testcustomer data
     # Customers should not see:
     # - Results with finalresult = 0 (no result yet)
     # - Results with finalresult = -2 (Redo status)
     # - Results with ready = false (manual hide)
-    if current_user.role == 'customer':
+    if current_user.role in ['customer', 'testcustomer']:
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
             models.AssayResult.finalresult != -2,
             models.AssayResult.ready == True
         )
+    elif current_user.role == 'testworker':
+        # testworker can only see testcustomer data
+        testcustomer_ids = db.query(models.User.id).filter(models.User.role == 'testcustomer').subquery()
+        query = query.filter(models.AssayResult.customer.in_(testcustomer_ids))
 
     # Get total count before pagination
     total = query.count()
@@ -74,17 +85,25 @@ def get_my_assay_result_by_id(
     - Regular users (customers): Only see their own results with finalresult > 0
     - Admin/Boss/Worker: Can view any result
     """
-    query = db.query(models.AssayResult).filter(models.AssayResult.id == result_id)
+    query = db.query(models.AssayResult).filter(
+        models.AssayResult.id == result_id,
+        not_deleted_filter()
+    )
 
-    # If user is a regular customer, filter by their ID and only show results with finalresult
+    # If user is a regular customer or test customer, filter by their ID and only show results with finalresult
     # Customers should not see results with finalresult = 0 or -2 (Redo) or ready = false
-    if current_user.role == 'customer':
+    # testworker can only see testcustomer data
+    if current_user.role in ['customer', 'testcustomer']:
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
             models.AssayResult.finalresult != -2,
             models.AssayResult.ready == True
         )
+    elif current_user.role == 'testworker':
+        # testworker can only see testcustomer data
+        testcustomer_ids = db.query(models.User.id).filter(models.User.role == 'testcustomer').subquery()
+        query = query.filter(models.AssayResult.customer.in_(testcustomer_ids))
 
     result = query.first()
 
@@ -113,10 +132,10 @@ def search_assay_results(
     - Customers: Only see their own results (customer_name filter ignored)
     - Admin/Boss/Worker: Can search all results with customer_name filter
     """
-    query = db.query(models.AssayResult)
+    query = db.query(models.AssayResult).filter(not_deleted_filter())
 
     # Role-based filtering
-    if current_user.role == 'customer':
+    if current_user.role in ['customer', 'testcustomer']:
         # Customers can only see their own results
         query = query.filter(
             models.AssayResult.customer == current_user.id,
@@ -124,13 +143,17 @@ def search_assay_results(
             models.AssayResult.finalresult != -2,
             models.AssayResult.ready == True
         )
+    elif current_user.role == 'testworker':
+        # testworker can only see testcustomer data
+        testcustomer_ids = db.query(models.User.id).filter(models.User.role == 'testcustomer').subquery()
+        query = query.filter(models.AssayResult.customer.in_(testcustomer_ids))
 
     # Apply search filters - only if values are provided and not empty
     if itemcode and itemcode.strip():
         query = query.filter(models.AssayResult.itemcode.ilike(f"%{itemcode.strip()}%"))
 
-    # Customer name filter only for admin/boss/worker
-    if customer_name and customer_name.strip() and current_user.role in ['admin', 'boss', 'worker']:
+    # Customer name filter only for admin/boss/worker/testworker
+    if customer_name and customer_name.strip() and current_user.role in ['admin', 'boss', 'worker', 'testworker']:
         # Join with User table to filter by customer name
         query = query.join(models.User, models.AssayResult.customer == models.User.id)
         query = query.filter(models.User.name.ilike(f"%{customer_name.strip()}%"))
@@ -189,7 +212,7 @@ def get_all_assay_results(
     """
     Get all assay results from all users (Admin only)
     """
-    results = db.query(models.AssayResult).order_by(models.AssayResult.created.desc()).all()
+    results = db.query(models.AssayResult).filter(not_deleted_filter()).order_by(models.AssayResult.created.desc()).all()
     return results
 
 
@@ -212,7 +235,7 @@ def get_user_assay_results(
     
     results = (
         db.query(models.AssayResult)
-        .filter(models.AssayResult.customer == user_id)
+        .filter(models.AssayResult.customer == user_id, not_deleted_filter())
         .order_by(models.AssayResult.created.desc())
         .all()
     )
@@ -231,16 +254,25 @@ def mark_assay_ready(
     When marking as ready, this will create a notification for the customer and send a push notification.
     """
     # Check permissions
-    if current_user.role not in ['admin', 'worker', 'boss']:
+    if current_user.role not in ['admin', 'worker', 'testworker', 'boss']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin, worker, and boss can change assay ready status"
+            detail="Only admin, worker, testworker, and boss can change assay ready status"
         )
 
-    # Get the assay
-    assay = db.query(models.AssayResult).filter(
-        models.AssayResult.id == assay_id
-    ).first()
+    # Get the assay - testworker can only modify testcustomer assays
+    if current_user.role == 'testworker':
+        testcustomer_ids = db.query(models.User.id).filter(models.User.role == 'testcustomer').subquery()
+        assay = db.query(models.AssayResult).filter(
+            models.AssayResult.id == assay_id,
+            models.AssayResult.customer.in_(testcustomer_ids),
+            not_deleted_filter()
+        ).first()
+    else:
+        assay = db.query(models.AssayResult).filter(
+            models.AssayResult.id == assay_id,
+            not_deleted_filter()
+        ).first()
 
     if not assay:
         raise HTTPException(

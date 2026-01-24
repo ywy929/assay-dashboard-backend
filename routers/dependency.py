@@ -68,9 +68,9 @@ def get_staff_user(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
     """
-    Dependency to ensure the current user has admin, worker, or boss role
+    Dependency to ensure the current user has admin, worker, testworker, or boss role
     """
-    if current_user.role not in ["admin", "worker", "boss"]:
+    if current_user.role not in ["admin", "worker", "testworker", "boss"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Staff access required.",

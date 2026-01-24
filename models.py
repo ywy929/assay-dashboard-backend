@@ -67,6 +67,7 @@ class AssayResult(Base):
     loss: Mapped[float] = Column(Numeric(3, 2))
     finalresult: Mapped[float] = Column(Numeric(5, 1))
     ready: Mapped[bool] = Column(Boolean, default=False)
+    deleted: Mapped[bool] = Column(Boolean, default=False)
     created: Mapped[DateTime] = Column(DateTime)
     modified: Mapped[DateTime] = Column(DateTime)
     returndate: Mapped[DateTime] = Column(DateTime)

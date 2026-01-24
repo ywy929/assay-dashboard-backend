@@ -49,7 +49,7 @@ def get_all_user_names(
     if current_user.role == 'admin':
         users = query.order_by(models.User.name).all()
         return [{"id": user.id, "name": user.name, "role": user.role} for user in users]
-    
+
     # Boss/Worker sees only customers with assay results
     elif current_user.role in ['boss', 'worker']:
         customers = (
@@ -60,7 +60,18 @@ def get_all_user_names(
             .all()
         )
         return [{"id": user.id, "name": user.name, "role": user.role} for user in customers]
-    
+
+    # testworker sees only testcustomers with assay results
+    elif current_user.role == 'testworker':
+        customers = (
+            query.join(models.AssayResult, models.User.id == models.AssayResult.customer)
+            .filter(models.User.role == 'testcustomer')
+            .distinct()
+            .order_by(models.User.name)
+            .all()
+        )
+        return [{"id": user.id, "name": user.name, "role": user.role} for user in customers]
+
     # Others don't have access
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -73,21 +84,25 @@ def get_customer_names(
     current_user: models.User = Depends(get_current_user)
 ):
     """
-    Get list of customer names for autocomplete (Admin/Boss/Worker only)
+    Get list of customer names for autocomplete (Admin/Boss/Worker/Testworker only)
     Returns only customers with at least one assay result
+    testworker only sees testcustomer data
     """
-    # Only admin, boss, and worker can access customer names
-    if current_user.role not in ['admin', 'boss', 'worker']:
+    # Only admin, boss, worker, and testworker can access customer names
+    if current_user.role not in ['admin', 'boss', 'worker', 'testworker']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to access customer names"
         )
 
+    # Determine which role to filter by based on current user
+    customer_role = 'testcustomer' if current_user.role == 'testworker' else 'customer'
+
     # Get unique customer names from users who have assay results
     customers = (
         db.query(models.User.id, models.User.name)
         .join(models.AssayResult, models.User.id == models.AssayResult.customer)
-        .filter(models.User.role == 'customer')
+        .filter(models.User.role == customer_role)
         .distinct()
         .order_by(models.User.name)
         .all()
@@ -106,10 +121,14 @@ def get_customers(
 ):
     """
     Get paginated list of customers with optional search
-    Available to: admin, worker, boss
+    Available to: admin, worker, boss, testworker
+    testworker only sees testcustomer data
     """
+    # Determine which role to filter by based on current user
+    customer_role = 'testcustomer' if current_user.role == 'testworker' else 'customer'
+
     # Base query for customers only
-    query = db.query(models.User).filter(models.User.role == 'customer')
+    query = db.query(models.User).filter(models.User.role == customer_role)
 
     # Apply search filter if provided
     if search:
@@ -166,12 +185,16 @@ def get_customer_detail(
 ):
     """
     Get detailed information about a specific customer
-    Available to: admin, worker, boss
+    Available to: admin, worker, boss, testworker
+    testworker can only access testcustomer data
     """
+    # Determine which role to filter by based on current user
+    customer_role = 'testcustomer' if current_user.role == 'testworker' else 'customer'
+
     # Get customer
     customer = db.query(models.User).filter(
         models.User.id == customer_id,
-        models.User.role == 'customer'
+        models.User.role == customer_role
     ).first()
 
     if not customer:
@@ -221,8 +244,17 @@ def change_user_password(
 
     # Permission check
     # Staff can change customer passwords or their own password
-    if target_user.role == 'customer' or target_user.id == current_user.id:
-        # Allowed
+    # testworker can only change testcustomer passwords or their own
+    if current_user.role == 'testworker':
+        if target_user.role == 'testcustomer' or target_user.id == current_user.id:
+            pass  # Allowed
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to change this user's password"
+            )
+    elif target_user.role == 'customer' or target_user.id == current_user.id:
+        # Allowed for regular staff
         pass
     else:
         raise HTTPException(

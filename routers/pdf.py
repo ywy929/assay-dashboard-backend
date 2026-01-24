@@ -6,7 +6,6 @@ import models
 from routers.dependency import get_current_user
 from services.pdf_generator import pdf_generator
 from datetime import datetime
-import os
 import re
 
 router = APIRouter()
