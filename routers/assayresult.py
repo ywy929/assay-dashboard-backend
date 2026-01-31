@@ -122,6 +122,8 @@ def search_assay_results(
     customer_name: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    fineness_min: Optional[float] = None,
+    fineness_max: Optional[float] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: models.User = Depends(get_current_user),
@@ -180,6 +182,12 @@ def search_assay_results(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid date_to format. Use YYYY-MM-DD"
             )
+
+    # Fineness range filter (only for admin/boss/worker/testworker)
+    if fineness_min is not None and current_user.role in ['admin', 'boss', 'worker', 'testworker']:
+        query = query.filter(models.AssayResult.finalresult >= fineness_min)
+    if fineness_max is not None and current_user.role in ['admin', 'boss', 'worker', 'testworker']:
+        query = query.filter(models.AssayResult.finalresult <= fineness_max)
 
     # Get total count before pagination
     total = query.count()
