@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from pydantic import BaseModel
 from database import get_db
 from routers.dependency import get_current_user, get_admin_user
 import models, schemas
 from typing import List, Optional
 from datetime import datetime, timedelta
-from routers.notifications import send_push_notification
+from routers.notifications import send_push_notification, send_retraction_notification
 from utils import build_assay_response
 
 router = APIRouter()
@@ -250,6 +251,118 @@ def get_user_assay_results(
     return results
 
 
+class BatchMarkReadyRequest(BaseModel):
+    assay_ids: List[int]
+    ready: bool
+
+
+@router.put("/batch-mark-ready")
+def batch_mark_assay_ready(
+    data: BatchMarkReadyRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Set ready status for multiple assays at once.
+    Accepts an explicit ready flag (true/false) instead of toggling.
+    Creates notifications and sends push for each assay that becomes ready.
+    """
+    if current_user.role not in ['admin', 'worker', 'testworker', 'boss']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only staff can change assay ready status"
+        )
+
+    results = []
+    total_notifications_sent = 0
+
+    for assay_id in data.assay_ids:
+        if current_user.role == 'testworker':
+            testcustomer_ids = db.query(models.User.id).filter(models.User.role == 'testcustomer').subquery()
+            assay = db.query(models.AssayResult).filter(
+                models.AssayResult.id == assay_id,
+                models.AssayResult.customer.in_(testcustomer_ids),
+                not_deleted_filter()
+            ).first()
+        else:
+            assay = db.query(models.AssayResult).filter(
+                models.AssayResult.id == assay_id,
+                not_deleted_filter()
+            ).first()
+
+        if not assay:
+            results.append({"assay_id": assay_id, "status": "not_found"})
+            continue
+
+        was_ready = assay.ready
+        assay.ready = data.ready
+        assay.modified = datetime.now()
+
+        notifications_sent = 0
+        if assay.ready and not was_ready:
+            notification = models.Notification(
+                user_id=assay.customer,
+                assay_id=assay.id,
+                title="Assay Ready",
+                message=f"Your assay {assay.itemcode} result is ready",
+                read=False,
+                created=datetime.now()
+            )
+            db.add(notification)
+
+            push_tokens = db.query(models.PushToken).filter(
+                models.PushToken.user_id == assay.customer
+            ).all()
+
+            collapse_id = f"assay-ready-{assay.id}"
+            for push_token in push_tokens:
+                send_push_notification(
+                    expo_push_token=push_token.token,
+                    title="Assay Ready",
+                    body=f"Your assay {assay.itemcode} result is ready",
+                    data={
+                        "assay_id": assay.id,
+                        "itemcode": assay.itemcode,
+                        "formcode": assay.formcode
+                    },
+                    collapse_id=collapse_id
+                )
+            notifications_sent = len(push_tokens)
+        elif not assay.ready and was_ready:
+            # Revert: delete in-app notifications for this assay
+            db.query(models.Notification).filter(
+                models.Notification.assay_id == assay.id,
+                models.Notification.user_id == assay.customer
+            ).delete()
+
+            # Retract push notification from device tray
+            collapse_id = f"assay-ready-{assay.id}"
+            push_tokens = db.query(models.PushToken).filter(
+                models.PushToken.user_id == assay.customer
+            ).all()
+            for push_token in push_tokens:
+                send_retraction_notification(
+                    expo_push_token=push_token.token,
+                    collapse_id=collapse_id,
+                    assay_id=assay.id
+                )
+
+        total_notifications_sent += notifications_sent
+        results.append({
+            "assay_id": assay_id,
+            "ready": assay.ready,
+            "notifications_sent": notifications_sent
+        })
+
+    db.commit()
+
+    return {
+        "results": results,
+        "total_updated": len([r for r in results if r.get("status") != "not_found"]),
+        "total_notifications_sent": total_notifications_sent
+    }
+
+
 @router.put("/{assay_id}/mark-ready")
 def mark_assay_ready(
     assay_id: int,
@@ -300,7 +413,7 @@ def mark_assay_ready(
             user_id=assay.customer,
             assay_id=assay.id,
             title="Assay Ready",
-            message=f"Your assay {assay.itemcode} is ready for pickup",
+            message=f"Your assay {assay.itemcode} result is ready",
             read=False,
             created=datetime.now()
         )
@@ -312,16 +425,18 @@ def mark_assay_ready(
         ).all()
 
         # Send push notifications
+        collapse_id = f"assay-ready-{assay.id}"
         for push_token in push_tokens:
             send_push_notification(
                 expo_push_token=push_token.token,
                 title="Assay Ready",
-                body=f"Your assay {assay.itemcode} is ready for pickup",
+                body=f"Your assay {assay.itemcode} result is ready",
                 data={
                     "assay_id": assay.id,
                     "itemcode": assay.itemcode,
                     "formcode": assay.formcode
-                }
+                },
+                collapse_id=collapse_id
             )
 
         db.commit()
@@ -333,7 +448,25 @@ def mark_assay_ready(
             "ready": True
         }
     else:
-        # Just update the status without notification
+        # Revert: delete in-app notifications for this assay
+        if not assay.ready and was_ready:
+            db.query(models.Notification).filter(
+                models.Notification.assay_id == assay.id,
+                models.Notification.user_id == assay.customer
+            ).delete()
+
+            # Retract push notification from device tray
+            collapse_id = f"assay-ready-{assay.id}"
+            push_tokens = db.query(models.PushToken).filter(
+                models.PushToken.user_id == assay.customer
+            ).all()
+            for push_token in push_tokens:
+                send_retraction_notification(
+                    expo_push_token=push_token.token,
+                    collapse_id=collapse_id,
+                    assay_id=assay.id
+                )
+
         db.commit()
 
         return {

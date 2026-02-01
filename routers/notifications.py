@@ -45,9 +45,10 @@ class NotificationStats(BaseModel):
 # PUSH NOTIFICATION HELPER
 # ----------------------------------------------------------------------
 
-def send_push_notification(expo_push_token: str, title: str, body: str, data: dict = None):
+def send_push_notification(expo_push_token: str, title: str, body: str, data: dict = None, collapse_id: str = None):
     """
     Send push notification using Expo Push Notification service.
+    collapse_id: stable identifier to group/replace notifications (maps to apns-collapse-id on iOS, collapse_key on Android).
     """
     try:
         message = {
@@ -57,6 +58,9 @@ def send_push_notification(expo_push_token: str, title: str, body: str, data: di
             "body": body,
             "data": data or {},
         }
+
+        if collapse_id:
+            message["displayID"] = collapse_id
 
         response = requests.post(
             "https://exp.host/--/api/v2/push/send",
@@ -71,6 +75,38 @@ def send_push_notification(expo_push_token: str, title: str, body: str, data: di
         return response.json()
     except Exception as e:
         print(f"Error sending push notification: {e}")
+        return None
+
+
+def send_retraction_notification(expo_push_token: str, collapse_id: str, assay_id: int):
+    """
+    Send a visible replacement notification to retract a previously sent 'Assay Ready' notification.
+    Uses the same displayID so iOS replaces the original notification in the tray.
+    The replacement shows a generic 'in process' message.
+    """
+    try:
+        message = {
+            "to": expo_push_token,
+            "displayID": collapse_id,
+            "title": "Brightness Assay",
+            "body": "Checking for updates...",
+            "sound": None,
+            "data": {"type": "retract", "assay_id": assay_id},
+        }
+
+        response = requests.post(
+            "https://exp.host/--/api/v2/push/send",
+            headers={
+                "Accept": "application/json",
+                "Accept-encoding": "gzip, deflate",
+                "Content-Type": "application/json",
+            },
+            json=message,
+        )
+
+        return response.json()
+    except Exception as e:
+        print(f"Error sending retraction notification: {e}")
         return None
 
 

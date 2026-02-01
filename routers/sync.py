@@ -278,7 +278,7 @@ def push_data(
                             user_id=existing.customer,
                             assay_id=existing.id,
                             title="Assay Ready",
-                            message=f"Your assay {existing.itemcode} is ready for pickup",
+                            message=f"Your assay {existing.itemcode} result is ready",
                             read=False,
                             created=datetime.now()
                         )
@@ -300,7 +300,7 @@ def push_data(
                         user_id=new_assay.customer,
                         assay_id=new_assay.id,
                         title="Assay Ready",
-                        message=f"Your assay {new_assay.itemcode} is ready for pickup",
+                        message=f"Your assay {new_assay.itemcode} result is ready",
                         read=False,
                         created=datetime.now()
                     )
@@ -383,7 +383,7 @@ def _send_push_for_assay(db: Session, assay: models.AssayResult):
             send_push_notification(
                 expo_push_token=push_token.token,
                 title="Assay Ready",
-                body=f"Your assay {assay.itemcode} is ready for pickup",
+                body=f"Your assay {assay.itemcode} result is ready",
                 data={"assay_id": assay.id, "itemcode": assay.itemcode}
             )
         except Exception:
