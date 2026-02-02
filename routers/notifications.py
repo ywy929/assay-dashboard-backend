@@ -183,7 +183,20 @@ def register_push_token(
         )
         db.add(push_token)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        # Race condition: another request inserted the same token concurrently
+        db.rollback()
+        existing_token = db.query(models.PushToken).filter(
+            models.PushToken.token == token_data.token
+        ).first()
+        if existing_token:
+            existing_token.user_id = current_user.id
+            existing_token.device_token = token_data.device_token
+            existing_token.device_type = token_data.device_type
+            existing_token.updated = datetime.now()
+            db.commit()
 
     return {"message": "Push token registered successfully"}
 
