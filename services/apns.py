@@ -73,6 +73,7 @@ def send_apns_alert(
             "reason": response.text,
             "apns_id": response.headers.get("apns-id"),
         }
+        print(f"APNs alert: status={response.status_code}, collapse_id={collapse_id}, apns_id={result['apns_id']}")
         if response.status_code != 200:
             print(f"APNs alert error: {result}")
         return result
@@ -120,6 +121,7 @@ def send_apns_silent(
             "reason": response.text,
             "apns_id": response.headers.get("apns-id"),
         }
+        print(f"APNs silent: status={response.status_code}, collapse_id={collapse_id}, apns_id={result['apns_id']}")
         if response.status_code != 200:
             print(f"APNs silent error: {result}")
         return result

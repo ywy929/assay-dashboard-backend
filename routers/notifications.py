@@ -63,6 +63,7 @@ def send_push_notification(
     """
     # iOS with native token → send via APNs directly
     if device_token and device_type == "ios" and settings.APNS_KEY_ID:
+        print(f"[PUSH] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
         collapse_id = f"assay-ready-{assay_id}" if assay_id else None
         return send_apns_alert(
             device_token=device_token,
@@ -73,6 +74,7 @@ def send_push_notification(
         )
 
     # Android or fallback → send via Expo Push API
+    print(f"[PUSH] Using Expo fallback (device_token={device_token}, device_type={device_type}, APNS_KEY_ID={bool(settings.APNS_KEY_ID)})")
     try:
         message = {
             "to": expo_push_token,
@@ -112,6 +114,7 @@ def send_retraction_notification(
     """
     # iOS with native token → APNs server-side collapse
     if device_token and device_type == "ios" and settings.APNS_KEY_ID:
+        print(f"[RETRACT] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
         collapse_id = f"assay-ready-{assay_id}"
         return send_apns_silent(
             device_token=device_token,
