@@ -7,7 +7,7 @@ from routers.dependency import get_current_user, get_admin_user
 import models, schemas
 from typing import List, Optional
 from datetime import datetime, timedelta
-from routers.notifications import send_push_notification, send_retraction_notification
+from routers.notifications import send_push_notification, send_not_ready_notification
 from utils import build_assay_response
 
 router = APIRouter()
@@ -330,20 +330,32 @@ def batch_mark_assay_ready(
                 )
             notifications_sent = len(push_tokens)
         elif not assay.ready and was_ready:
-            # Revert: delete in-app notifications for this assay
+            # Revert: delete old "Assay Ready" in-app notifications
             db.query(models.Notification).filter(
                 models.Notification.assay_id == assay.id,
                 models.Notification.user_id == assay.customer
             ).delete()
 
-            # Send silent push to dismiss notification from device tray
+            # Create new "Assay Not Ready" in-app notification
+            notification = models.Notification(
+                user_id=assay.customer,
+                assay_id=assay.id,
+                title="Assay Not Ready",
+                message=f"Your assay {assay.itemcode} is no longer ready",
+                read=False,
+                created=datetime.now()
+            )
+            db.add(notification)
+
+            # Send visible "not ready" push notification
             push_tokens = db.query(models.PushToken).filter(
                 models.PushToken.user_id == assay.customer
             ).all()
             for push_token in push_tokens:
-                send_retraction_notification(
+                send_not_ready_notification(
                     expo_push_token=push_token.token,
                     assay_id=assay.id,
+                    itemcode=assay.itemcode,
                     device_token=push_token.device_token,
                     device_type=push_token.device_type,
                 )
@@ -450,21 +462,33 @@ def mark_assay_ready(
             "ready": True
         }
     else:
-        # Revert: delete in-app notifications for this assay
+        # Revert: delete old "Assay Ready" in-app notifications
         if not assay.ready and was_ready:
             db.query(models.Notification).filter(
                 models.Notification.assay_id == assay.id,
                 models.Notification.user_id == assay.customer
             ).delete()
 
-            # Send silent push to dismiss notification from device tray
+            # Create new "Assay Not Ready" in-app notification
+            notification = models.Notification(
+                user_id=assay.customer,
+                assay_id=assay.id,
+                title="Assay Not Ready",
+                message=f"Your assay {assay.itemcode} is no longer ready",
+                read=False,
+                created=datetime.now()
+            )
+            db.add(notification)
+
+            # Send visible "not ready" push notification
             push_tokens = db.query(models.PushToken).filter(
                 models.PushToken.user_id == assay.customer
             ).all()
             for push_token in push_tokens:
-                send_retraction_notification(
+                send_not_ready_notification(
                     expo_push_token=push_token.token,
                     assay_id=assay.id,
+                    itemcode=assay.itemcode,
                     device_token=push_token.device_token,
                     device_type=push_token.device_type,
                 )

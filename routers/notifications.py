@@ -8,7 +8,7 @@ from routers.dependency import get_db, get_current_user
 from pydantic import BaseModel
 from config import settings
 import requests
-from services.apns import send_apns_alert, send_apns_silent
+from services.apns import send_apns_alert
 
 router = APIRouter(
     tags=["notifications"]
@@ -100,38 +100,40 @@ def send_push_notification(
         return None
 
 
-def send_retraction_notification(
+def send_not_ready_notification(
     expo_push_token: str,
     assay_id: int,
+    itemcode: str = None,
     device_token: str = None,
     device_type: str = None,
 ):
     """
-    Retract a previously sent 'Assay Ready' notification.
-    iOS with native token → APNs silent push with same collapse-id
-    (server-side replacement removes the original notification).
-    Otherwise → Expo silent push for client-side dismissal.
+    Send a visible 'Assay Not Ready' notification when a worker reverts
+    an assay from ready back to not-ready.
     """
-    # iOS with native token → APNs server-side collapse
+    title = "Assay Not Ready"
+    body = f"Your assay {itemcode} is no longer ready" if itemcode else "Your assay is no longer ready"
+    data = {"assay_id": assay_id, "itemcode": itemcode}
+
+    # iOS with native token → send via APNs
     if device_token and device_type == "ios" and settings.APNS_KEY_ID:
-        print(f"[RETRACT] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
-        collapse_id = f"assay-ready-{assay_id}"
-        return send_apns_silent(
+        print(f"[NOT-READY] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
+        return send_apns_alert(
             device_token=device_token,
-            collapse_id=collapse_id,
-            data={"type": "retract", "assay_id": assay_id},
+            title=title,
+            body=body,
+            data=data,
         )
 
-    # Android or fallback → Expo silent push
+    # Android or fallback → Expo Push API
+    print(f"[NOT-READY] Using Expo fallback for assay_id={assay_id}")
     try:
         message = {
             "to": expo_push_token,
-            "data": {
-                "type": "retract",
-                "assay_id": assay_id,
-            },
-            "_contentAvailable": True,
-            "priority": "high",
+            "sound": "default",
+            "title": title,
+            "body": body,
+            "data": data,
         }
 
         response = requests.post(
@@ -146,7 +148,7 @@ def send_retraction_notification(
 
         return response.json()
     except Exception as e:
-        print(f"Error sending silent retraction: {e}")
+        print(f"Error sending not-ready notification: {e}")
         return None
 
 
