@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import models
 from routers.dependency import get_db, get_current_user
 from pydantic import BaseModel
+from config import settings
 import requests
+from services.apns import send_apns_alert, send_apns_silent
 
 router = APIRouter(
     tags=["notifications"]
@@ -19,6 +21,7 @@ router = APIRouter(
 
 class PushTokenCreate(BaseModel):
     token: str
+    device_token: Optional[str] = None  # Native APNs/FCM token
     device_type: str  # ios, android, web
 
 
@@ -45,11 +48,31 @@ class NotificationStats(BaseModel):
 # PUSH NOTIFICATION HELPER
 # ----------------------------------------------------------------------
 
-def send_push_notification(expo_push_token: str, title: str, body: str, data: dict = None, collapse_id: str = None):
+def send_push_notification(
+    expo_push_token: str,
+    title: str,
+    body: str,
+    data: dict = None,
+    device_token: str = None,
+    device_type: str = None,
+    assay_id: int = None,
+):
     """
-    Send push notification using Expo Push Notification service.
-    collapse_id: stable identifier to group/replace notifications (maps to apns-collapse-id on iOS, collapse_key on Android).
+    Send push notification. Routes iOS to APNs (with collapse-id) if
+    a native device_token is available, otherwise falls back to Expo.
     """
+    # iOS with native token → send via APNs directly
+    if device_token and device_type == "ios" and settings.APNS_KEY_ID:
+        collapse_id = f"assay-ready-{assay_id}" if assay_id else None
+        return send_apns_alert(
+            device_token=device_token,
+            title=title,
+            body=body,
+            data=data,
+            collapse_id=collapse_id,
+        )
+
+    # Android or fallback → send via Expo Push API
     try:
         message = {
             "to": expo_push_token,
@@ -58,9 +81,6 @@ def send_push_notification(expo_push_token: str, title: str, body: str, data: di
             "body": body,
             "data": data or {},
         }
-
-        if collapse_id:
-            message["displayID"] = collapse_id
 
         response = requests.post(
             "https://exp.host/--/api/v2/push/send",
@@ -78,20 +98,37 @@ def send_push_notification(expo_push_token: str, title: str, body: str, data: di
         return None
 
 
-def send_retraction_notification(expo_push_token: str, collapse_id: str, assay_id: int):
+def send_retraction_notification(
+    expo_push_token: str,
+    assay_id: int,
+    device_token: str = None,
+    device_type: str = None,
+):
     """
-    Send a visible replacement notification to retract a previously sent 'Assay Ready' notification.
-    Uses the same displayID so iOS replaces the original notification in the tray.
-    The replacement shows a generic 'in process' message.
+    Retract a previously sent 'Assay Ready' notification.
+    iOS with native token → APNs silent push with same collapse-id
+    (server-side replacement removes the original notification).
+    Otherwise → Expo silent push for client-side dismissal.
     """
+    # iOS with native token → APNs server-side collapse
+    if device_token and device_type == "ios" and settings.APNS_KEY_ID:
+        collapse_id = f"assay-ready-{assay_id}"
+        return send_apns_silent(
+            device_token=device_token,
+            collapse_id=collapse_id,
+            data={"type": "retract", "assay_id": assay_id},
+        )
+
+    # Android or fallback → Expo silent push
     try:
         message = {
             "to": expo_push_token,
-            "displayID": collapse_id,
-            "title": "Brightness Assay",
-            "body": "Checking for updates...",
-            "sound": None,
-            "data": {"type": "retract", "assay_id": assay_id},
+            "data": {
+                "type": "retract",
+                "assay_id": assay_id,
+            },
+            "_contentAvailable": True,
+            "priority": "high",
         }
 
         response = requests.post(
@@ -106,7 +143,7 @@ def send_retraction_notification(expo_push_token: str, collapse_id: str, assay_i
 
         return response.json()
     except Exception as e:
-        print(f"Error sending retraction notification: {e}")
+        print(f"Error sending silent retraction: {e}")
         return None
 
 
@@ -131,6 +168,7 @@ def register_push_token(
     if existing_token:
         # Update existing token
         existing_token.user_id = current_user.id
+        existing_token.device_token = token_data.device_token
         existing_token.device_type = token_data.device_type
         existing_token.updated = datetime.now()
     else:
@@ -138,6 +176,7 @@ def register_push_token(
         push_token = models.PushToken(
             user_id=current_user.id,
             token=token_data.token,
+            device_token=token_data.device_token,
             device_type=token_data.device_type,
             created=datetime.now(),
             updated=datetime.now()

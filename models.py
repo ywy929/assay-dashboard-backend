@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import Column, Integer, String, DateTime, Numeric, LargeBinary, Boolean, ForeignKey, SmallInteger, Text
 from sqlalchemy.orm import relationship, Mapped
 from database import Base
@@ -170,6 +171,7 @@ class PushToken(Base):
     id: Mapped[int] = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id: Mapped[int] = Column(Integer, ForeignKey("user.id"), index=True)
     token: Mapped[str] = Column(String(500), unique=True, index=True)
+    device_token: Mapped[Optional[str]] = Column(String(500), nullable=True)
     device_type: Mapped[str] = Column(String(20))  # ios, android, web
     created: Mapped[DateTime] = Column(DateTime)
     updated: Mapped[DateTime] = Column(DateTime)

@@ -148,3 +148,6 @@ temp/
 start_backend.bat
 start_backend_hidden.vbs
 seed_test_data.py
+
+#APNS key
+*.p8

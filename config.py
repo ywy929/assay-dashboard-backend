@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # Sync Settings
     SYNC_API_KEY: str = "change_this_to_a_secure_key"
 
+    # APNs (Apple Push Notification service) - for direct iOS push
+    APNS_KEY_ID: str = ""
+    APNS_TEAM_ID: str = ""
+    APNS_KEY_PATH: str = ""  # Path to .p8 file
+    APNS_BUNDLE_ID: str = "com.brightnessassay.app"
+    APNS_USE_SANDBOX: bool = True  # True for dev/TestFlight, False for App Store
+
     class Config:
         env_file = ".env"
         extra = "ignore"

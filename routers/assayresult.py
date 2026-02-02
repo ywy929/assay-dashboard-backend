@@ -314,7 +314,6 @@ def batch_mark_assay_ready(
                 models.PushToken.user_id == assay.customer
             ).all()
 
-            collapse_id = f"assay-ready-{assay.id}"
             for push_token in push_tokens:
                 send_push_notification(
                     expo_push_token=push_token.token,
@@ -325,7 +324,9 @@ def batch_mark_assay_ready(
                         "itemcode": assay.itemcode,
                         "formcode": assay.formcode
                     },
-                    collapse_id=collapse_id
+                    device_token=push_token.device_token,
+                    device_type=push_token.device_type,
+                    assay_id=assay.id,
                 )
             notifications_sent = len(push_tokens)
         elif not assay.ready and was_ready:
@@ -335,16 +336,16 @@ def batch_mark_assay_ready(
                 models.Notification.user_id == assay.customer
             ).delete()
 
-            # Retract push notification from device tray
-            collapse_id = f"assay-ready-{assay.id}"
+            # Send silent push to dismiss notification from device tray
             push_tokens = db.query(models.PushToken).filter(
                 models.PushToken.user_id == assay.customer
             ).all()
             for push_token in push_tokens:
                 send_retraction_notification(
                     expo_push_token=push_token.token,
-                    collapse_id=collapse_id,
-                    assay_id=assay.id
+                    assay_id=assay.id,
+                    device_token=push_token.device_token,
+                    device_type=push_token.device_type,
                 )
 
         total_notifications_sent += notifications_sent
@@ -425,7 +426,6 @@ def mark_assay_ready(
         ).all()
 
         # Send push notifications
-        collapse_id = f"assay-ready-{assay.id}"
         for push_token in push_tokens:
             send_push_notification(
                 expo_push_token=push_token.token,
@@ -436,7 +436,9 @@ def mark_assay_ready(
                     "itemcode": assay.itemcode,
                     "formcode": assay.formcode
                 },
-                collapse_id=collapse_id
+                device_token=push_token.device_token,
+                device_type=push_token.device_type,
+                assay_id=assay.id,
             )
 
         db.commit()
@@ -455,16 +457,16 @@ def mark_assay_ready(
                 models.Notification.user_id == assay.customer
             ).delete()
 
-            # Retract push notification from device tray
-            collapse_id = f"assay-ready-{assay.id}"
+            # Send silent push to dismiss notification from device tray
             push_tokens = db.query(models.PushToken).filter(
                 models.PushToken.user_id == assay.customer
             ).all()
             for push_token in push_tokens:
                 send_retraction_notification(
                     expo_push_token=push_token.token,
-                    collapse_id=collapse_id,
-                    assay_id=assay.id
+                    assay_id=assay.id,
+                    device_token=push_token.device_token,
+                    device_type=push_token.device_type,
                 )
 
         db.commit()
