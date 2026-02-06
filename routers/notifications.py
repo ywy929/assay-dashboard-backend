@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from config import settings
 import requests
 from services.apns import send_apns_alert
+from services.fcm import send_fcm_notification as send_fcm_direct
 
 router = APIRouter(
     tags=["notifications"]
@@ -58,8 +59,10 @@ def send_push_notification(
     assay_id: int = None,
 ):
     """
-    Send push notification. Routes iOS to APNs (with collapse-id) if
-    a native device_token is available, otherwise falls back to Expo.
+    Send push notification. Routes to the appropriate service:
+    - iOS with native token → APNs directly
+    - Android with native token → FCM V1 directly
+    - Fallback → Expo Push API
     """
     # iOS with native token → send via APNs directly
     if device_token and device_type == "ios" and settings.APNS_KEY_ID:
@@ -73,8 +76,18 @@ def send_push_notification(
             collapse_id=collapse_id,
         )
 
-    # Android or fallback → send via Expo Push API
-    print(f"[PUSH] Using Expo fallback (device_token={device_token}, device_type={device_type}, APNS_KEY_ID={bool(settings.APNS_KEY_ID)})")
+    # Android with native token → send via FCM V1 directly
+    if device_token and device_type == "android" and settings.FCM_SERVICE_ACCOUNT_PATH:
+        print(f"[PUSH] Using FCM direct for device_token={device_token[:20]}..., assay_id={assay_id}")
+        return send_fcm_direct(
+            device_token=device_token,
+            title=title,
+            body=body,
+            data=data,
+        )
+
+    # Fallback → send via Expo Push API
+    print(f"[PUSH] Using Expo fallback (device_token={device_token}, device_type={device_type})")
     try:
         message = {
             "to": expo_push_token,
@@ -82,6 +95,7 @@ def send_push_notification(
             "title": title,
             "body": body,
             "data": data or {},
+            "channelId": "default",
         }
 
         response = requests.post(
@@ -94,7 +108,9 @@ def send_push_notification(
             json=message,
         )
 
-        return response.json()
+        result = response.json()
+        print(f"[PUSH] Expo response: {result}")
+        return result
     except Exception as e:
         print(f"Error sending push notification: {e}")
         return None
@@ -125,7 +141,17 @@ def send_not_ready_notification(
             data=data,
         )
 
-    # Android or fallback → Expo Push API
+    # Android with native token → send via FCM V1 directly
+    if device_token and device_type == "android" and settings.FCM_SERVICE_ACCOUNT_PATH:
+        print(f"[NOT-READY] Using FCM direct for device_token={device_token[:20]}..., assay_id={assay_id}")
+        return send_fcm_direct(
+            device_token=device_token,
+            title=title,
+            body=body,
+            data=data,
+        )
+
+    # Fallback → Expo Push API
     print(f"[NOT-READY] Using Expo fallback for assay_id={assay_id}")
     try:
         message = {
@@ -134,6 +160,7 @@ def send_not_ready_notification(
             "title": title,
             "body": body,
             "data": data,
+            "channelId": "default",
         }
 
         response = requests.post(

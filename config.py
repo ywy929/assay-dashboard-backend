@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     APNS_BUNDLE_ID: str = "com.brightnessassay.app"
     APNS_USE_SANDBOX: bool = True  # True for dev/TestFlight, False for App Store
 
+    # FCM (Firebase Cloud Messaging) - for direct Android push
+    FCM_PROJECT_ID: str = "assayapp"
+    FCM_SERVICE_ACCOUNT_PATH: str = ""  # Path to service account JSON
+
     class Config:
         env_file = ".env"
         extra = "ignore"

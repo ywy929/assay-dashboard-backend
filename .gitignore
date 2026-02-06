@@ -151,3 +151,4 @@ seed_test_data.py
 
 #APNS key
 *.p8
+CLAUDE.md

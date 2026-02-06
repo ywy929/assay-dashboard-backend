@@ -359,6 +359,7 @@ def batch_mark_assay_ready(
                     device_token=push_token.device_token,
                     device_type=push_token.device_type,
                 )
+            notifications_sent = len(push_tokens)
 
         total_notifications_sent += notifications_sent
         results.append({
