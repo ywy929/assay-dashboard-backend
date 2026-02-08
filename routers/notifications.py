@@ -66,7 +66,7 @@ def send_push_notification(
     """
     # iOS with native token → send via APNs directly
     if device_token and device_type == "ios" and settings.APNS_KEY_ID:
-        print(f"[PUSH] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [PUSH] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
         collapse_id = f"assay-ready-{assay_id}" if assay_id else None
         return send_apns_alert(
             device_token=device_token,
@@ -78,7 +78,7 @@ def send_push_notification(
 
     # Android with native token → send via FCM V1 directly
     if device_token and device_type == "android" and settings.FCM_SERVICE_ACCOUNT_PATH:
-        print(f"[PUSH] Using FCM direct for device_token={device_token[:20]}..., assay_id={assay_id}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [PUSH] Using FCM direct for device_token={device_token[:20]}..., assay_id={assay_id}")
         return send_fcm_direct(
             device_token=device_token,
             title=title,
@@ -87,7 +87,7 @@ def send_push_notification(
         )
 
     # Fallback → send via Expo Push API
-    print(f"[PUSH] Using Expo fallback (device_token={device_token}, device_type={device_type})")
+    print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [PUSH] Using Expo fallback (device_token={device_token}, device_type={device_type})")
     try:
         message = {
             "to": expo_push_token,
@@ -109,10 +109,10 @@ def send_push_notification(
         )
 
         result = response.json()
-        print(f"[PUSH] Expo response: {result}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [PUSH] Expo response: {result}")
         return result
     except Exception as e:
-        print(f"Error sending push notification: {e}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [PUSH] Error sending push notification: {e}")
         return None
 
 
@@ -133,7 +133,7 @@ def send_not_ready_notification(
 
     # iOS with native token → send via APNs
     if device_token and device_type == "ios" and settings.APNS_KEY_ID:
-        print(f"[NOT-READY] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [NOT-READY] Using APNs for device_token={device_token[:8]}..., assay_id={assay_id}")
         return send_apns_alert(
             device_token=device_token,
             title=title,
@@ -143,7 +143,7 @@ def send_not_ready_notification(
 
     # Android with native token → send via FCM V1 directly
     if device_token and device_type == "android" and settings.FCM_SERVICE_ACCOUNT_PATH:
-        print(f"[NOT-READY] Using FCM direct for device_token={device_token[:20]}..., assay_id={assay_id}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [NOT-READY] Using FCM direct for device_token={device_token[:20]}..., assay_id={assay_id}")
         return send_fcm_direct(
             device_token=device_token,
             title=title,
@@ -152,7 +152,7 @@ def send_not_ready_notification(
         )
 
     # Fallback → Expo Push API
-    print(f"[NOT-READY] Using Expo fallback for assay_id={assay_id}")
+    print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [NOT-READY] Using Expo fallback for assay_id={assay_id}")
     try:
         message = {
             "to": expo_push_token,
@@ -175,7 +175,7 @@ def send_not_ready_notification(
 
         return response.json()
     except Exception as e:
-        print(f"Error sending not-ready notification: {e}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [NOT-READY] Error: {e}")
         return None
 
 
@@ -192,6 +192,8 @@ def register_push_token(
     """
     Register or update a push notification token for the current user.
     """
+    print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [TOKEN] Registering push token for user={current_user.id}, device_type={token_data.device_type}, device_token={'yes' if token_data.device_token else 'None'}")
+
     # Check if token already exists
     existing_token = db.query(models.PushToken).filter(
         models.PushToken.token == token_data.token
