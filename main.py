@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import models
 from database import engine
 from config import settings
-from routers import users, auth, assayresult, analytics, pdf, notifications, sync
+from routers import users, auth, assayresult, analytics, pdf, notifications, sync, calculator
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
@@ -37,6 +37,7 @@ app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 app.include_router(pdf.router, prefix="/pdf", tags=["PDF Generation"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(sync.router, prefix="/sync", tags=["Sync"])
+app.include_router(calculator.router, prefix="/calculator", tags=["Calculator"])
 
 # Serve uploaded files (return photos, etc.)
 os.makedirs("uploads/returns", exist_ok=True)

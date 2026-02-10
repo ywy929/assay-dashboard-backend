@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class UserCreate(BaseModel):
@@ -129,3 +129,43 @@ class BatchReturnRequest(BaseModel):
     collector: str
     incharge: str
     return_photo: Optional[str] = None
+
+
+# ----------------------------------------------------------------------
+# CALCULATOR SCHEMAS (Gold Alloy Calculator)
+# ----------------------------------------------------------------------
+
+class AlloyMaterial(BaseModel):
+    name: str
+    percentage: float
+    weight: float
+
+
+class CreateMixRecipeRequest(BaseModel):
+    name: str
+    input_weight: float
+    input_purity: float
+    desired_purity: float
+    output_weight: float
+    material_to_add: float
+    material_type: str  # 'alloy' or 'pure_gold'
+    total_alloy: float
+    alloy_mix: List[AlloyMaterial]
+
+
+class MixRecipeResponse(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    input_weight: float
+    input_purity: float
+    desired_purity: float
+    output_weight: float
+    material_to_add: float
+    material_type: str
+    total_alloy: float
+    alloy_mix: List[AlloyMaterial]
+    created: datetime
+
+    class Config:
+        from_attributes = True

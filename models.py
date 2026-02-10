@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import Column, Integer, String, DateTime, Numeric, LargeBinary, Boolean, ForeignKey, SmallInteger, Text
+from sqlalchemy import Column, Integer, String, DateTime, Numeric, LargeBinary, Boolean, ForeignKey, SmallInteger, Text, JSON
 from sqlalchemy.orm import relationship, Mapped
 from database import Base
 # Base is the essential class for declarative model definition.
@@ -37,6 +37,7 @@ class User(Base):
     refresh_tokens = relationship("RefreshToken", back_populates="user")
     notifications = relationship("Notification", back_populates="user")
     push_tokens = relationship("PushToken", back_populates="user")
+    mix_recipes = relationship("MixRecipe", back_populates="user")
 
 
 # ----------------------------------------------------------------------
@@ -179,3 +180,26 @@ class PushToken(Base):
     updated: Mapped[DateTime] = Column(DateTime)
 
     user = relationship("User", back_populates="push_tokens")
+
+
+# ----------------------------------------------------------------------
+# MIX RECIPE MODEL (Gold Calculator)
+# ----------------------------------------------------------------------
+
+class MixRecipe(Base):
+    __tablename__ = "mix_recipe"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id: Mapped[int] = Column(Integer, ForeignKey("user.id"), index=True)
+    name: Mapped[str] = Column(String(100))
+    input_weight: Mapped[float] = Column(Numeric(12, 2))
+    input_purity: Mapped[float] = Column(Numeric(5, 2))
+    desired_purity: Mapped[float] = Column(Numeric(5, 2))
+    output_weight: Mapped[float] = Column(Numeric(12, 2))
+    material_to_add: Mapped[float] = Column(Numeric(12, 2))
+    material_type: Mapped[str] = Column(String(20))  # 'alloy' or 'pure_gold'
+    total_alloy: Mapped[float] = Column(Numeric(12, 2))
+    alloy_mix: Mapped[dict] = Column(JSON)
+    created: Mapped[DateTime] = Column(DateTime)
+
+    user = relationship("User", back_populates="mix_recipes")
