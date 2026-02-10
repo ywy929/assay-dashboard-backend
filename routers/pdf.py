@@ -123,79 +123,6 @@ def generate_pdf_for_single_assay(
     )
 
 
-@router.get("/generate/{formcode}")
-def generate_pdf_for_formcode(
-    formcode: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """
-    Generate PDF for a specific formcode (grouped assay results)
-    Returns PDF file
-    """
-    # Get all assay results for this formcode
-    assay_results = db.query(models.AssayResult).filter(
-        models.AssayResult.formcode == formcode
-    ).order_by(models.AssayResult.created).all()
-
-    if not assay_results:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No assay results found for this formcode"
-        )
-
-    # Check if user has permission to view these results
-    # Customers can only view their own results
-    if current_user.role == 'customer':
-        if any(result.customer != current_user.id for result in assay_results):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to access these results"
-            )
-        # Customers can only access ready results
-        if any(not result.ready for result in assay_results):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No assay results found for this formcode"
-            )
-
-    # Get customer information from the first result
-    first_result = assay_results[0]
-    customer = db.query(models.User).filter(
-        models.User.id == first_result.customer
-    ).first()
-
-    if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer not found"
-        )
-
-    # Format date
-    date = first_result.created.strftime("%d %b %Y")
-
-    # Prepare formcode items
-    formcode_items = [build_formcode_item(r) for r in assay_results]
-
-    # Generate PDF
-    pdf_buffer = pdf_generator.generate_pdf(
-        customer_name=customer.name,
-        date=date,
-        formcode_items=formcode_items
-    )
-
-    # Return PDF as streaming response
-    itemcodes = [r.itemcode or '' for r in assay_results]
-    filename = build_pdf_filename(customer.name, itemcodes)
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
-    )
-
-
 @router.get("/generate/selected")
 def generate_pdf_for_selected(
     ids: str = Query(..., description="Comma-separated assay result IDs"),
@@ -275,4 +202,77 @@ def generate_pdf_for_selected(
         headers={
             "Content-Disposition": f"attachment; filename={filename}"
         },
+    )
+
+
+@router.get("/generate/{formcode}")
+def generate_pdf_for_formcode(
+    formcode: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Generate PDF for a specific formcode (grouped assay results)
+    Returns PDF file
+    """
+    # Get all assay results for this formcode
+    assay_results = db.query(models.AssayResult).filter(
+        models.AssayResult.formcode == formcode
+    ).order_by(models.AssayResult.created).all()
+
+    if not assay_results:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assay results found for this formcode"
+        )
+
+    # Check if user has permission to view these results
+    # Customers can only view their own results
+    if current_user.role == 'customer':
+        if any(result.customer != current_user.id for result in assay_results):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to access these results"
+            )
+        # Customers can only access ready results
+        if any(not result.ready for result in assay_results):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No assay results found for this formcode"
+            )
+
+    # Get customer information from the first result
+    first_result = assay_results[0]
+    customer = db.query(models.User).filter(
+        models.User.id == first_result.customer
+    ).first()
+
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+
+    # Format date
+    date = first_result.created.strftime("%d %b %Y")
+
+    # Prepare formcode items
+    formcode_items = [build_formcode_item(r) for r in assay_results]
+
+    # Generate PDF
+    pdf_buffer = pdf_generator.generate_pdf(
+        customer_name=customer.name,
+        date=date,
+        formcode_items=formcode_items
+    )
+
+    # Return PDF as streaming response
+    itemcodes = [r.itemcode or '' for r in assay_results]
+    filename = build_pdf_filename(customer.name, itemcodes)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
     )
