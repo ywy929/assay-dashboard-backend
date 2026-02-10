@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import time
+from io import BytesIO
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from pydantic import BaseModel
 from database import get_db
-from routers.dependency import get_current_user, get_admin_user
+from routers.dependency import get_current_user, get_admin_user, get_staff_user
 import models, schemas
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -40,11 +43,13 @@ def get_my_assay_results(
     # - Results with finalresult = -2 (Redo status)
     # - Results with ready = false (manual hide)
     if current_user.role in ['customer', 'testcustomer']:
+        thirty_days_ago = datetime.now() - timedelta(days=30)
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
             models.AssayResult.finalresult != -2,
-            models.AssayResult.ready == True
+            models.AssayResult.ready == True,
+            models.AssayResult.created >= thirty_days_ago
         )
     elif current_user.role == 'testworker':
         # testworker can only see testcustomer data
@@ -139,12 +144,14 @@ def search_assay_results(
 
     # Role-based filtering
     if current_user.role in ['customer', 'testcustomer']:
-        # Customers can only see their own results
+        # Customers can only see their own results from the past 30 days
+        thirty_days_ago = datetime.now() - timedelta(days=30)
         query = query.filter(
             models.AssayResult.customer == current_user.id,
             models.AssayResult.finalresult != 0,
             models.AssayResult.finalresult != -2,
-            models.AssayResult.ready == True
+            models.AssayResult.ready == True,
+            models.AssayResult.created >= thirty_days_ago
         )
     elif current_user.role == 'testworker':
         # testworker can only see testcustomer data
@@ -501,3 +508,113 @@ def mark_assay_ready(
             "assay_id": assay.id,
             "ready": False
         }
+
+
+@router.post("/upload-return-photo")
+def upload_return_photo(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_staff_user),
+):
+    """
+    Upload a photo for sample return documentation.
+    Resizes to max 1200px width, saves as JPEG.
+    Available to: admin, worker, boss, testworker
+    """
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/jpg"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPEG and PNG images are allowed"
+        )
+
+    # Read file content
+    contents = file.file.read()
+
+    # Validate file size (max 10MB raw upload)
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size must be less than 10MB"
+        )
+
+    # Resize and compress using Pillow
+    from PIL import Image
+
+    img = Image.open(BytesIO(contents))
+
+    # Convert RGBA to RGB if needed (for PNG with transparency)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+
+    # Resize if wider than 1200px
+    max_width = 1200
+    if img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.LANCZOS)
+
+    # Generate unique filename
+    timestamp = int(time.time())
+    filename = f"return_{timestamp}_{file.filename.split('.')[0]}.jpg"
+
+    # Save to uploads/returns/
+    upload_dir = "uploads/returns"
+    os.makedirs(upload_dir, exist_ok=True)
+    filepath = os.path.join(upload_dir, filename)
+
+    img.save(filepath, "JPEG", quality=75)
+
+    return {"filename": filename}
+
+
+@router.put("/batch-return")
+def record_batch_return(
+    request: schemas.BatchReturnRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_staff_user),
+):
+    """
+    Record sample return for an entire batch (formcode).
+    Sets returndate, collector, incharge, and optional return_photo for all items.
+    Available to: admin, worker, boss, testworker
+    testworker can only update batches belonging to testcustomer users.
+    """
+    # Build base query for the formcode
+    query = db.query(models.AssayResult).filter(
+        models.AssayResult.formcode == request.formcode,
+        not_deleted_filter()
+    )
+
+    # testworker restriction: only update batches belonging to testcustomer
+    if current_user.role == "testworker":
+        testcustomer_ids = [
+            u.id for u in db.query(models.User.id).filter(
+                models.User.role == "testcustomer"
+            ).all()
+        ]
+        query = query.filter(models.AssayResult.customer.in_(testcustomer_ids))
+
+    assays = query.all()
+
+    if not assays:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assay results found for this formcode"
+        )
+
+    now = datetime.now()
+    for assay in assays:
+        assay.returndate = now
+        assay.collector = request.collector
+        assay.incharge = request.incharge
+        assay.modified = now
+        if request.return_photo:
+            assay.return_photo = request.return_photo
+
+    db.commit()
+
+    return {
+        "message": f"Sample return recorded for formcode {request.formcode}",
+        "updated_count": len(assays)
+    }

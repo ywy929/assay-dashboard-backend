@@ -160,6 +160,7 @@ def get_customers(
             "area": customer.area,
             "billing": customer.billing,
             "coupon": customer.coupon,
+            "max_devices": customer.max_devices or 1,
             "created": customer.created,
             "total_assays": assay_count
         }
@@ -216,6 +217,7 @@ def get_customer_detail(
         area=customer.area,
         billing=customer.billing,
         coupon=customer.coupon,
+        max_devices=customer.max_devices or 1,
         created=customer.created,
         total_assays=assay_count
     )
@@ -272,6 +274,39 @@ def change_user_password(
     db.commit()
 
     return {"message": "Password changed successfully"}
+
+
+@router.put("/customers/{customer_id}/max-devices")
+def update_max_devices(
+    customer_id: int,
+    request: schemas.MaxDevicesUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_admin_user)
+):
+    """
+    Update max allowed devices for a customer (Admin/Boss only)
+    """
+    if request.max_devices < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="max_devices must be at least 1"
+        )
+
+    customer = db.query(models.User).filter(
+        models.User.id == customer_id,
+        models.User.role.in_(['customer', 'testcustomer'])
+    ).first()
+
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+
+    customer.max_devices = request.max_devices
+    db.commit()
+
+    return {"message": f"Max devices updated to {request.max_devices}"}
 
 
 @router.get("/{user_id}", response_model=schemas.UserResponse)

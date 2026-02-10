@@ -176,12 +176,22 @@ def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
 
-    # Revoke any existing refresh tokens for this user
-    db.query(models.RefreshToken).filter(
-        models.RefreshToken.user_id == user.id,
-        models.RefreshToken.revoked == False
-    ).update({"revoked": True})
-    db.commit()
+    # Enforce per-user device limit for customers
+    # Staff roles (worker, admin, boss) have unlimited devices
+    staff_roles = {"worker", "testworker", "admin", "boss"}
+    if user.role not in staff_roles:
+        max_devices = user.max_devices or 1
+        active_tokens = db.query(models.RefreshToken).filter(
+            models.RefreshToken.user_id == user.id,
+            models.RefreshToken.revoked == False,
+            models.RefreshToken.expires_at > datetime.now()
+        ).order_by(models.RefreshToken.created.asc()).all()
+        # Revoke oldest tokens to make room for the new login
+        if len(active_tokens) >= max_devices:
+            excess = len(active_tokens) - max_devices + 1
+            for token in active_tokens[:excess]:
+                token.revoked = True
+            db.commit()
 
     access_token, refresh_token = create_tokens(user, db)
 

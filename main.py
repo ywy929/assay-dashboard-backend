@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import models
 from database import engine
 from config import settings
@@ -35,6 +37,10 @@ app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 app.include_router(pdf.router, prefix="/pdf", tags=["PDF Generation"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(sync.router, prefix="/sync", tags=["Sync"])
+
+# Serve uploaded files (return photos, etc.)
+os.makedirs("uploads/returns", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/")

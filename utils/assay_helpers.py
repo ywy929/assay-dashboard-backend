@@ -35,4 +35,5 @@ def build_assay_response(result: models.AssayResult) -> Dict[str, Any]:
         "created": result.created,
         "modified": result.modified,
         "returndate": result.returndate,
+        "return_photo": result.return_photo,
     }

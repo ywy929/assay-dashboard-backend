@@ -81,6 +81,7 @@ class AssayResultResponse(BaseModel):
     created: datetime
     modified: datetime
     returndate: Optional[datetime] = None
+    return_photo: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -98,6 +99,7 @@ class CustomerResponse(BaseModel):
     area: Optional[str] = None
     billing: Optional[bool] = None
     coupon: Optional[bool] = None
+    max_devices: Optional[int] = 1
     created: datetime
     total_assays: Optional[int] = None
 
@@ -116,3 +118,14 @@ class PaginatedCustomers(BaseModel):
 class ChangePasswordRequest(BaseModel):
     user_id: int
     new_password: str
+
+
+class MaxDevicesUpdate(BaseModel):
+    max_devices: int
+
+
+class BatchReturnRequest(BaseModel):
+    formcode: int
+    collector: str
+    incharge: str
+    return_photo: Optional[str] = None

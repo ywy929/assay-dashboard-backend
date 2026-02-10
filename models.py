@@ -28,6 +28,7 @@ class User(Base):
     orientation: Mapped[str] = Column(String(45))
     billing: Mapped[bool] = Column(Boolean)
     coupon: Mapped[bool] = Column(Boolean)
+    max_devices: Mapped[int] = Column(Integer, default=1)
     created: Mapped[DateTime] = Column(DateTime)
     modified: Mapped[DateTime] = Column(DateTime)
 
@@ -72,6 +73,7 @@ class AssayResult(Base):
     created: Mapped[DateTime] = Column(DateTime)
     modified: Mapped[DateTime] = Column(DateTime)
     returndate: Mapped[DateTime] = Column(DateTime)
+    return_photo: Mapped[str] = Column(String(255))
 
     customer_user = relationship("User", back_populates="assay_results")
     notifications = relationship("Notification", back_populates="assay")
